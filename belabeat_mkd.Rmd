@@ -1,0 +1,214 @@
+---
+title: "Bellabeat_Data_Analysis_Case_Study"
+author: "Kohei Suzuki"
+date: "19/01/2022"
+output: html_document
+---
+
+## 1. Scenario
+
+[Bellebeat](https://bellabeat.com/), founded in 2013, is a high-tech company that manufactures health-focused smart products for women. **Urška Sršen**, cofounder and Chief Creative Officer of the company, has asked their marketing analytics team to analyze smart device usage data in order to gain insight into how people are using their smart devices. Using this information, she would like high-level recommendations for how these trends can inform Bellabeat’s marketing strategy.
+
+
+## 2. Business task
+
+Based on data analysis of trends in smart device usage, high-level recommendations should be made for Bellabeat’s marketing strategy.
+
+
+## 3. Data set for the analysis
+
+A specific public data is pointed by **Urška Sršen** who is the key stakefolder here: [FitBit Fitness Tracker Data](https://www.kaggle.com/arashnic/fitbit). This Kaggle data set contains personal fitness tracker from 30 fitbit users who consented to the submission of personal tracker data, including minute-level output for physical activity, heart rate, and sleep monitoring for a distributed survey via Amazon Mechanical Turk between 03.12.2016-05.12.2016.
+
+```{r include=FALSE}
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+install.packages("GGally", repos = "http://cran.us.r-project.org")
+install.packages("ggsci", repos = "http://cran.us.r-project.org")
+install.packages("reshape2", repos = "http://cran.us.r-project.org")
+library(tidyverse)
+library(gridExtra)
+library("GGally")
+library(dplyr)
+library(tibble)
+library(lubridate)
+library(tidyr)
+library(reshape2)
+```
+
+
+## 4. Loading data
+
+**The FitBit Fitness Tracker Data** includes in total 18 csv files. As **Sršen** suggests, this data set seems to have some limitations for the business task. One cannot rule out the possibility that the data set is biased, because it is not clear whether the 30 Fitbit users can be representative sample for the entire smart device users. Furthermore, their gender is unknown. However, some trends in this data set will be analysed which could be instructive for the business task. 
+
+At first, creating 2 data frames, **activity** and **sleep**, by using 2 csv files from the data set.
+```{r create data frames}
+activity <- read.csv("./bellabeat_case_study/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+
+sleep <- read.csv("./bellabeat_case_study/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+```
+
+
+## 5. Summerizing data
+
+In order to total daily active times in **VeryActiveMinutes**, **FairlyActiveMinutes** and **LightlyActiveMinutes**, a new column **TotalActiveMinutes** is created.
+```{r create a new column}
+activity <- mutate(activity, TotalActiveMinutes = VeryActiveMinutes + FairlyActiveMinutes + LightlyActiveMinutes)
+```
+
+Make quick statistic summary and visualization of data distribution in the **activity** data frame .
+```{r summarize activity}
+activity %>%  
+  select(TotalSteps,
+         TotalDistance,
+         TotalActiveMinutes,
+         SedentaryMinutes,
+         Calories) %>%
+  summary()
+```
+
+```{r}
+hist_1 <- ggplot(data=activity, aes(TotalSteps)) +
+  geom_histogram()
+hist_2 <- ggplot(data=activity, aes(TotalDistance)) +
+  geom_histogram()
+hist_3 <- ggplot(data=activity, aes(TotalActiveMinutes)) +
+  geom_histogram()
+hist_4 <- ggplot(data=activity, aes(SedentaryMinutes)) +
+  geom_histogram()
+hist_5 <- ggplot(data=activity, aes(Calories)) +
+  geom_histogram()
+grid.arrange(hist_1, hist_2, hist_3, hist_4, hist_5, ncol = 2)
+```
+
+Make quick statistic summary and visualization of data distribution in the **sleep** data frame.
+```{r summarize sleep}
+sleep %>%  
+  select(TotalSleepRecords,
+  TotalMinutesAsleep,
+  TotalTimeInBed) %>%
+  summary()
+```
+
+```{r}
+hist_6 <- ggplot(data=sleep, aes(TotalSleepRecords)) +
+  geom_histogram()
+hist_7 <- ggplot(data=sleep, aes(TotalMinutesAsleep)) +
+  geom_histogram()
+hist_8 <- ggplot(data=sleep, aes(TotalTimeInBed)) +
+  geom_histogram()
+grid.arrange(hist_6, hist_7, hist_8, ncol = 2)
+```
+
+
+## 6. Transforming data
+
+The **activity** data frame includes apparently some **unrealistic** data which can not be viewed as outlier. There are observations which have **1440.0 SedentaryMinute and 0 TotalSteps**.
+
+```{r}
+count(activity, SedentaryMinutes == 1440.0 & TotalSteps == 0)
+```
+
+These 72 observations can be deleted from the data frame safely.
+```{r}
+activity <- filter(activity, !(SedentaryMinutes == 1440.0 & TotalSteps == 0))
+```
+
+Before merging two data frames, **activity** and **sleep**, a new column **weekday** is added to the **sleep** data frame in order to analyse trends by day of the week later.
+```{r}
+sleep$SleepDay = as.POSIXct(sleep$SleepDay,format="%m/%d/%Y")
+sleep$weekday <- wday(sleep$SleepDay, label=TRUE, abbr = FALSE)
+```
+
+Merging 2 data frames by using common columns **Id** and **date** which is created here.
+```{r merge data frames}
+activity$ActivityDate = as.POSIXct(activity$ActivityDate, format="%m/%d/%Y")
+activity$date <- format(activity$ActivityDate, format = "%m/%d/%y")
+sleep$date <- format(sleep$SleepDay, format = "%m/%d/%y")
+merged_data <- merge(sleep, activity, by=c('Id', 'date'))
+```
+
+
+## 7. Plotting explorations
+
+A scatter plot matrix is created in order to gain the first insight into relationship among daily level data. 
+```{r}
+num_data <- merged_data %>%  
+  select(TotalSleepRecords,
+  TotalMinutesAsleep,
+  TotalTimeInBed,
+  TotalSteps,
+  TotalDistance,
+  TotalActiveMinutes,
+  SedentaryMinutes,
+  Calories)
+ggpairs(num_data)
+```
+
+Scatterplots of each pair of numeric variable are drawn on the left part of the figure. Pearson correlation is displayed on the right. Variable distribution is available on the diagonal.
+
+There are clear **positive** correlations between **TotalDistance** and **TotalSteps**, and between **TotalTimeInBed** and **TotalMinutesAsleep**.
+```{r}
+ggplot(data=num_data, aes(x=TotalDistance, y=TotalSteps)) +
+  geom_point() +
+  geom_smooth()
+```
+
+```{r}
+ggplot(data=num_data, aes(x=TotalTimeInBed, y=TotalMinutesAsleep)) +
+  geom_point() +
+  geom_smooth()
+```
+
+While these correlations are not surprising at all, there is also a strong **negative** correlation between **SedentaryMinutes** and **TotalTimeInBed**, which is not self-evident.
+```{r}
+ggplot(data=num_data, aes(x=SedentaryMinutes, y=TotalTimeInBed)) +
+  geom_point()+
+  geom_smooth()
+```
+
+**A weekday wise analysis** could illuminate this correlation more clearly. For this purpose, our data set is organized by day of the week. 
+```{r}
+df_wday <- merged_data %>%
+  group_by(weekday) %>%
+  summarize(
+    TotalActiveMinutes,
+    SedentaryMinutes,
+    TotalTimeInBed
+  )
+head(df_wday)
+```
+
+Mean values for each field are then calculated and visualized by weekday.
+```{r}
+week_df <- aggregate(df_wday[, 2:4], list(weekday = df_wday$weekday), mean)
+week_df
+```
+
+```{r}
+ggplot(week_df, aes(weekday))+
+  geom_point(aes(y= TotalActiveMinutes, colour = "TotalActiveMinutes")) +
+  geom_point(aes(y= SedentaryMinutes, colour = "SedentaryMinutes")) +
+  geom_point(aes(y= TotalTimeInBed, colour = "TotalTimeInBed"))+
+  labs(x="Weekday", y="Mean time")
+```
+
+There are the least **SedentaryMinutes** and the most **TotalTimeInBed** on weekends. Then, **SedentaryMinutes** increases and **TotalTimeInBed** decreases clearly **from Sunday until Tuesday**. These two days, except Saturday, are *the most active and probably the most productive days of the week* as well.
+
+However, this trend is reversed from Tuesday to Wednesday. **TotalTimeInBed** increases and **SedentaryMinutes** decreases. Interestingly, not only **SedentaryMinutes**, but also **TotalActiveMinutes** is dropping **from Tuesday until Thursday**. Therefore these two days are *the least active and probably the least productive days of the week*, although **TotalTimeInBed** on Wednesday is very high.
+
+
+## 8. Findings and recommendations
+
+**A key insight** from this data analysis is that the quality of sleep on Wednesday may not be good enough for recovering from fatigue due to intensive works and activities at the beginning of the week. 
+
+According to [the AASM (American Academy of Sleep Medicine)](https://sleepeducation.org/healthy-sleep/healthy-sleep-habits/), most adults will need **7 hours or more** for a good nights sleep. The AASM mentions also some habits that can improve our sleep health. For instance, **keeping a consistent sleep schedule** and **establishing a relaxing nightly routine**. [Medical studies](https://www.sciencedaily.com/releases/2019/07/190719173554.htm) suggest that **bathing 1-2 hours before bedtime in water of about 104-109 degrees Fahrenheit** can significantly improve our sleep quality.
+
+Our data shows that the Fitbit users get recommended daily sleep time in general, however they tend to work longer and sleep shorter at the beginning of the week. This overworking trend can be the cause of the midweek fatigue. These unstable lifestyle could be transformed into more healthy and more efficient one by using Bellabeat products. 
+
+Based on above, there are two recommendations focusing on [Bellabeat app](https://staging-bellabeatmain.kinsta.cloud/wp-content/uploads/2020/11/Bellabeat_Press-sheet_Wellness-Coach-min.png):
+
+**1. 'Smart slow start': Configure the app for guiding users not to overwork at the beginning of the week. For instance, offering users special workout programs which are exclusively available in the early evening on Monday and Tuesday. Positive effect of these 'smart slow start' could be measured by increasing rate of total active time in midweek.**
+
+**2. 'Smart bathing': Extend the app by adding a new function which can help users develop habit of bathing before bedtime. Ideal bath duration and ideal change of body temperature can be measured by the app precisely. Using existing sleep pattern analysis of the app, improvement of the sleep quality by bathing can be monitored easily. Bathing can help users achieve their daily hydration goal as well. New high-tech products for bath time could be also developed. 'Smart bathing' has, therefore, very big potential to unlock new growth opportunities for the company.**
+
+#### Let's change gloomy hump day to happy bath day with Bellabeat!
